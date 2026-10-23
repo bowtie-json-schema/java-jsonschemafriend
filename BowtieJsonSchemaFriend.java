@@ -1,3 +1,4 @@
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -91,6 +92,18 @@ public class BowtieJsonSchemaFriend {
 
   private void run(JsonNode node) throws JsonProcessingException {
     RunRequest runRequest = objectMapper.treeToValue(node, RunRequest.class);
+    if (runRequest.output() != null && !runRequest.output().equals("flag")) {
+      List<TestResult> results =
+          runRequest.testCase()
+              .tests()
+              .stream()
+              .map(test -> TestResult.skipped(
+                  "unsupported output format " + runRequest.output()))
+              .toList();
+      output.println(objectMapper.writeValueAsString(
+          new RunResponse(runRequest.seq(), results)));
+      return;
+    }
 
     Loader registryLoader = new Loader() {
       public String load(URI uri, boolean cacheSchema) throws IOException {
@@ -165,7 +178,8 @@ record DialectRequest(String dialect) {}
 
 record DialectResponse(boolean ok) {}
 
-record RunRequest(JsonNode seq, @JsonProperty("case") TestCase testCase) {}
+record RunRequest(JsonNode seq, @JsonProperty("case") TestCase testCase,
+                  String output) {}
 
 record RunResponse(JsonNode seq, List<TestResult> results) {}
 
@@ -191,4 +205,13 @@ record
     Test(String description, String comment, JsonNode instance, boolean valid) {
 }
 
-record TestResult(boolean valid) {}
+@JsonInclude(JsonInclude.Include.NON_NULL)
+record TestResult(Boolean valid, Boolean skipped, String message) {
+  public TestResult(boolean valid) {
+    this(valid, null, null);
+  }
+
+  public static TestResult skipped(String message) {
+    return new TestResult(null, true, message);
+  }
+}
